@@ -144,11 +144,11 @@ async def guess(event: hikari.GuildMessageCreateEvent) -> None:
         # Get guesser
         guesser = int(event.message.author)
         # Secret author is the guesser
-        author_is_not_guesser = True  # secret.author != guesser
+        author_is_not_guesser = secret.author != guesser
         # Word has not been guessed already
         word_has_not_been_guessed = secret.guesser is None
         # Guess contains the secret word
-        secret_in_guess = secret.word in event.message.content
+        secret_in_guess = secret.word.lower() in event.message.content.lower()
         # If the guesser is not the setter, and the message includes the word
         if author_is_not_guesser and word_has_not_been_guessed and secret_in_guess:
             embed = hikari.Embed(title="Secret Word Found!", color=COLOR)
