@@ -51,7 +51,6 @@ async def start(ctx: lightbulb.Context) -> None:
         )
     else:
         db.start_guild(guild_id, author_id, word)
-        # Create embed
         embed = hikari.Embed(title="New Secret Word!", color=COLOR)
         embed.add_field(name="A new secret word has been set.", value="Good luck!")
         embed.add_field(name="Set by:", value=f"<@{author_id}>")
@@ -66,17 +65,22 @@ async def secret(ctx: lightbulb.Context) -> None:
     guild_id = int(ctx.guild_id)
     author_id = int(ctx.author.id)
     word = str(ctx.options.word)
-    # Get current secret
-    secret = db.get_secret(guild_id)
-    if secret.guesser is not None and secret.guesser == author_id:
-        db.set_word(guild_id, author_id, word)
+    if db.secret_is_set(guild_id):
+        await ctx.respond(
+            "The secret word is already set!", flags=hikari.MessageFlag.EPHEMERAL
+        )
+    elif db.is_keeper(guild_id, author_id):
+        db.set_word(guild_id, word)
         embed = hikari.Embed(title="New Secret Word!", color=COLOR)
-        embed.add_field(name="A new secret word has been set.", value="Good luck!")
+        embed.add_field(
+            name="A new secret word has been set.",
+            value="The word keeper can use `/hint` to add hints. Good luck!",
+        )
         embed.add_field(name="Set by:", value=f"<@{author_id}>")
         await ctx.respond(embed)
     else:
         await ctx.respond(
-            "You are not the current Secret Word setter!",
+            "You are not the current Secret Word keeper!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
@@ -90,15 +94,42 @@ async def hint(ctx: lightbulb.Context) -> None:
     author_id = int(ctx.author.id)
     hint = str(ctx.options.hint)
     # Get current secret
-    secret = db.get_secret(guild_id)
-    if secret.author == author_id and secret.guesser is None:
+    if not db.secret_is_set(guild_id):
+        await ctx.respond(
+            "The secret word has not been set yet.", flags=hikari.MessageFlag.EPHEMERAL
+        )
+    elif db.is_keeper(guild_id, author_id):
         hint_number = db.add_hint(guild_id, hint)
         embed = hikari.Embed(title="Hint Added!", color=HINT_COLOR)
         embed.add_field(name=f"Hint #{hint_number}", value=hint)
         await ctx.respond(embed)
     else:
         await ctx.respond(
-            "You are not the current Secret Word setter!",
+            "You are not the current Secret Word keeper!",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+
+
+@bot.command
+@lightbulb.command(
+    "remind", "In case you (the keeper) forgot the secret word.", guilds=GUILDS
+)
+@lightbulb.implements(lightbulb.SlashCommand)
+async def remind(ctx: lightbulb.Context) -> None:
+    guild_id = int(ctx.guild_id)
+    author_id = int(ctx.author.id)
+    if not db.secret_is_set(guild_id):
+        await ctx.respond(
+            "The secret word has not been set yet.", flags=hikari.MessageFlag.EPHEMERAL
+        )
+    elif db.is_keeper(guild_id, author_id):
+        secret = db.get_secret(guild_id)
+        embed = hikari.Embed(title="Secret Word Reminder", color=HINT_COLOR)
+        embed.add_field(name="The secret word is...", value=secret)
+        await ctx.respond(embed, flags=hikari.MessageFlag.EPHEMERAL)
+    else:
+        await ctx.respond(
+            "You are not the current Secret Word keeper!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
@@ -110,28 +141,19 @@ async def clearhints(ctx: lightbulb.Context) -> None:
     guild_id = int(ctx.guild_id)
     author_id = int(ctx.author.id)
     # Get current secret
-    secret = db.get_secret(guild_id)
-    if secret.is_set():
-        if secret.author == author_id and secret.guesser is None:
-            db.clear_hints(guild_id)
-            embed = hikari.Embed(title="Hints cleared!", color=HINT_COLOR)
-            embed.add_field(
-                name="All hints have been cleared.",
-                value="Enter new ones using the `/hint` command.",
-            )
-            await ctx.respond(embed)
-        else:
-            await ctx.respond(
-                "You are not the current Secret Word setter!",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-    else:
-        embed = hikari.Embed(title="Clear Hints", color=HINT_COLOR)
+    if db.is_keeper(guild_id, author_id):
+        db.clear_hints(guild_id)
+        embed = hikari.Embed(title="Hints cleared!", color=HINT_COLOR)
         embed.add_field(
-            name="The secret word has not been set yet!",
-            value="Set the secret word with `/secret`.",
+            name="All hints have been cleared.",
+            value="Enter new ones using the `/hint` command.",
         )
-        await ctx.respond(embed, flags=hikari.MessageFlag.EPHEMERAL)
+        await ctx.respond(embed)
+    else:
+        await ctx.respond(
+            "You are not the current Secret Word keeper!",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
 
 
 @bot.command
@@ -139,22 +161,19 @@ async def clearhints(ctx: lightbulb.Context) -> None:
 @lightbulb.implements(lightbulb.SlashCommand)
 async def hints(ctx: lightbulb.Context) -> None:
     guild_id = int(ctx.guild_id)
-    # Get current secret
-    secret = db.get_secret(guild_id)
-    if secret.is_set():
-        # Get current hints
+    embed = hikari.Embed(title="Hints", color=HINT_COLOR)
+    if db.secret_is_set(guild_id):
         hints = db.get_hints(guild_id)
-        embed = hikari.Embed(title="Hints", color=HINT_COLOR)
         hints_str = ""
         for i, hint in enumerate(hints):
             hints_str += f"#{i+1}: {hint}\n"
         if hints_str == "":
             hints_str = "No hints set yet. Use `/hint` to set a hint."
         embed.add_field(name="The current hints are...", value=hints_str)
-        embed.add_field(name="The secret word is set by:", value=f"<@{secret.author}>")
+        keeper = db.get_keeper(guild_id)
+        embed.add_field(name="The secret word is set by:", value=f"<@{keeper}>")
         await ctx.respond(embed)
     else:
-        embed = hikari.Embed(title="Hints", color=HINT_COLOR)
         embed.add_field(
             name="The secret word has not been set yet!",
             value="Set the secret word with `/secret`.",
@@ -169,25 +188,24 @@ async def guess(event: hikari.GuildMessageCreateEvent) -> None:
         return
     # Get current secret
     guild_id = int(event.guild_id)
-    secret = db.get_secret(guild_id)
-    # Only check if a secret word is set
-    if secret.is_set():
+    # Only check if a secret word is set and string is in content
+    if db.secret_is_set(guild_id) and isinstance(event.message.content, str):
+        # Get secret word
+        secret = db.get_secret(guild_id)
         # Get guesser
         guesser = int(event.message.author)
-        # Secret author is the guesser
-        author_is_not_guesser = secret.author != guesser
-        # Word has not been guessed already
-        word_has_not_been_guessed = secret.guesser is None
+        # Secret word keeper is not the guesser
+        keeper_is_not_guesser = not db.is_keeper(guild_id, guesser)
         # Guess contains the secret word
-        secret_in_guess = secret.word.lower() in event.message.content.lower()
+        secret_in_guess = secret.lower() in event.message.content.lower()
         # If the guesser is not the setter, and the message includes the word
-        if author_is_not_guesser and word_has_not_been_guessed and secret_in_guess:
+        if keeper_is_not_guesser and secret_in_guess:
             embed = hikari.Embed(title="Secret Word Found!", color=COLOR)
             embed.add_field(
-                name=f"The secret word was... {secret.word}!",
+                name=f"The secret word was... {secret}!",
                 value=f"<@{guesser}> may pick a new word with `/secret`.",
             )
-            db.set_guesser(guild_id, guesser)
+            db.change_keeper(guild_id, guesser)
             db.clear_hints(guild_id)
             await event.message.respond(embed)
 

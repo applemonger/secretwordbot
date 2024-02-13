@@ -2,16 +2,6 @@ import duckdb
 import os
 
 
-class Secret:
-    def __init__(self, author: int, word: str, guesser: int):
-        self.author = author
-        self.word = word
-        self.guesser = guesser
-
-    def is_set(self) -> bool:
-        return self.word is not None
-
-
 class Database:
     PRECISION = 18
     SCALE = 6
@@ -21,9 +11,8 @@ class Database:
         query = """
             CREATE TABLE IF NOT EXISTS SECRET_WORDS (
                 guild_id BIGINT PRIMARY KEY,
-                author BIGINT, 
+                keeper BIGINT, 
                 word VARCHAR,
-                guesser BIGINT
             );
         """
         self.db.execute(query)
@@ -36,19 +25,42 @@ class Database:
         """
         self.db.execute(query)
 
-    def get_secret(self, guild_id: int) -> Secret:
+    def get_secret(self, guild_id: int) -> str:
         query = """
-            SELECT author, word, guesser
+            SELECT word
             FROM SECRET_WORDS
             WHERE guild_id = ?
         """
         result = self.db.execute(query, [guild_id]).fetchone()
         if result is None:
-            return Secret(None, None, None)
+            return None
         else:
-            word = None if result[1] is None else str(result[1])
-            guesser = None if result[2] is None else int(result[2])
-            return Secret(author=int(result[0]), word=word, guesser=guesser)
+            word = None if result[0] is None else str(result[0])
+            return word
+
+    def secret_is_set(self, guild_id: int) -> bool:
+        query = """
+            SELECT word
+            FROM SECRET_WORDS
+            WHERE guild_id = ?
+        """
+        result = self.db.execute(query, [guild_id]).fetchone()
+        if result is None:
+            return False
+        else:
+            return result[0] is not None
+
+    def get_keeper(self, guild_id: int) -> int:
+        query = """
+            SELECT keeper
+            FROM SECRET_WORDS
+            WHERE guild_id = ?
+        """
+        result = self.db.execute(query, [guild_id]).fetchone()
+        if result is None:
+            return None
+        else:
+            return int(result[0])
 
     def get_hints(self, guild_id: int) -> list[str]:
         query = "SELECT hint FROM HINTS WHERE guild_id = ? ORDER BY hint_number"
@@ -65,37 +77,37 @@ class Database:
         self.db.execute(query, [guild_id, hint_number, hint])
         return hint_number
 
+    def change_keeper(self, guild_id: int, member_id: int):
+        query = """
+            UPDATE SECRET_WORDS
+            SET keeper = ?, word = NULL
+            WHERE guild_id = ?
+        """
+        self.db.execute(query, [member_id, guild_id])
+
     def clear_hints(self, guild_id: int):
         query = "DELETE FROM HINTS WHERE guild_id = ?"
         self.db.execute(query, [guild_id])
 
-    def set_word(self, guild_id: int, author_id: int, word: str):
+    def set_word(self, guild_id: int, word: str):
         query = """
             UPDATE SECRET_WORDS
-            SET word = ?, author = ?, guesser = NULL
+            SET word = ?
             WHERE guild_id = ?
         """
-        self.db.execute(query, [word, author_id, guild_id])
+        self.db.execute(query, [word, guild_id])
 
-    def is_author(self, guild_id: int, member_id: int) -> bool:
+    def is_keeper(self, guild_id: int, member_id: int) -> bool:
         query = """
             SELECT COUNT(*)
             FROM SECRET_WORDS
-            WHERE guild_id = ? AND author = ?
+            WHERE guild_id = ? AND keeper = ?
         """
         result = self.db.execute(query, [guild_id, member_id]).fetchone()
         return int(result[0]) == 1
 
-    def set_guesser(self, guild_id: int, guesser_id: int):
-        query = """
-            UPDATE SECRET_WORDS
-            SET guesser = ?, word = NULL
-            WHERE guild_id = ?
-        """
-        self.db.execute(query, [guesser_id, guild_id])
-
     def start_guild(self, guild_id: int, member_id: int, word: str):
-        query = "INSERT INTO SECRET_WORDS VALUES (?, ?, ?, NULL);"
+        query = "INSERT INTO SECRET_WORDS VALUES (?, ?, ?);"
         self.db.execute(query, [guild_id, member_id, word])
 
     def guild_exists(self, guild_id: int) -> bool:
