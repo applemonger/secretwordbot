@@ -111,6 +111,30 @@ async def hint(ctx: lightbulb.Context) -> None:
 
 
 @bot.command
+@lightbulb.command(
+    "remind", "In case you (the keeper) forgot the secret word.", guilds=GUILDS
+)
+@lightbulb.implements(lightbulb.SlashCommand)
+async def remind(ctx: lightbulb.Context) -> None:
+    guild_id = int(ctx.guild_id)
+    author_id = int(ctx.author.id)
+    if not db.secret_is_set(guild_id):
+        await ctx.respond(
+            "The secret word has not been set yet.", flags=hikari.MessageFlag.EPHEMERAL
+        )
+    elif db.is_keeper(guild_id, author_id):
+        secret = db.get_secret(guild_id)
+        embed = hikari.Embed(title="Secret Word Reminder", color=HINT_COLOR)
+        embed.add_field(name="The secret word is...", value=secret)
+        await ctx.respond(embed, flags=hikari.MessageFlag.EPHEMERAL)
+    else:
+        await ctx.respond(
+            "You are not the current Secret Word keeper!",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+
+
+@bot.command
 @lightbulb.command("clearhints", "Clear all current hints.", guilds=GUILDS)
 @lightbulb.implements(lightbulb.SlashCommand)
 async def clearhints(ctx: lightbulb.Context) -> None:
