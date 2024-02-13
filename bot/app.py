@@ -91,7 +91,7 @@ async def hint(ctx: lightbulb.Context) -> None:
     hint = str(ctx.options.hint)
     # Get current secret
     secret = db.get_secret(guild_id)
-    if secret.author == author_id:
+    if secret.author == author_id and secret.guesser is not None:
         hint_number = db.add_hint(guild_id, hint)
         embed = hikari.Embed(title="Hint Added!", color=HINT_COLOR)
         embed.add_field(name=f"Hint #{hint_number}", value=hint)
