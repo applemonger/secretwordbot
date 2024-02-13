@@ -104,6 +104,37 @@ async def hint(ctx: lightbulb.Context) -> None:
 
 
 @bot.command
+@lightbulb.command("clearhints", "Clear all current hints.", guilds=GUILDS)
+@lightbulb.implements(lightbulb.SlashCommand)
+async def clearhints(ctx: lightbulb.Context) -> None:
+    guild_id = int(ctx.guild_id)
+    author_id = int(ctx.author.id)
+    # Get current secret
+    secret = db.get_secret(guild_id)
+    if secret.is_set():
+        if secret.author == author_id and secret.guesser is None:
+            db.clear_hints(guild_id)
+            embed = hikari.Embed(title="Hints cleared!", color=HINT_COLOR)
+            embed.add_field(
+                name="All hints have been cleared.",
+                value="Enter new ones using the `/hint` command.",
+            )
+            await ctx.respond(embed)
+        else:
+            await ctx.respond(
+                "You are not the current Secret Word setter!",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+    else:
+        embed = hikari.Embed(title="Clear Hints", color=HINT_COLOR)
+        embed.add_field(
+            name="The secret word has not been set yet!",
+            value="Set the secret word with `/secret`.",
+        )
+        await ctx.respond(embed, flags=hikari.MessageFlag.EPHEMERAL)
+
+
+@bot.command
 @lightbulb.command("hints", "Get all hints for the current secret word.", guilds=GUILDS)
 @lightbulb.implements(lightbulb.SlashCommand)
 async def hints(ctx: lightbulb.Context) -> None:
