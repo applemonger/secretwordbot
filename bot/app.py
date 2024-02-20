@@ -65,11 +65,7 @@ async def secret(ctx: lightbulb.Context) -> None:
     guild_id = int(ctx.guild_id)
     author_id = int(ctx.author.id)
     word = str(ctx.options.word)
-    if db.secret_is_set(guild_id):
-        await ctx.respond(
-            "The secret word is already set!", flags=hikari.MessageFlag.EPHEMERAL
-        )
-    elif db.is_keeper(guild_id, author_id):
+    if db.is_keeper(guild_id, author_id):
         db.set_word(guild_id, word)
         embed = hikari.Embed(title="New Secret Word!", color=COLOR)
         embed.add_field(
